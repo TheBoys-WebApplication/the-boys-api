@@ -13,6 +13,8 @@ pub fn router() -> Router<AppState> {
         // Auth
         .route("/auth/register", post(auth::register))
         .route("/auth/login", post(auth::login))
+        .route("/auth/logout", post(auth::logout))
+        .route("/auth/me", get(auth::me))
         // Groups
         .route("/groups", post(groups::create_group).get(groups::list_groups))
         .route("/groups/join", post(groups::join_group))
