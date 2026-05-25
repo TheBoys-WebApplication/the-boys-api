@@ -6,6 +6,7 @@ use axum::{
 use crate::AppState;
 
 mod auth;
+mod expenses;
 mod groups;
 mod trips;
 
@@ -42,4 +43,21 @@ pub fn router() -> Router<AppState> {
             "/activities/:id",
             put(trips::update_activity).delete(trips::delete_activity),
         )
+        // Expenses
+        .route(
+            "/trips/:id/expenses",
+            get(expenses::list_expenses).post(expenses::create_expense),
+        )
+        .route(
+            "/expenses/:id",
+            put(expenses::update_expense).delete(expenses::delete_expense),
+        )
+        // Balances
+        .route("/trips/:id/balances", get(expenses::get_balances))
+        // Settlements
+        .route(
+            "/trips/:id/settlements",
+            get(expenses::list_settlements).post(expenses::create_settlement),
+        )
+        .route("/settlements/:id", delete(expenses::delete_settlement))
 }
