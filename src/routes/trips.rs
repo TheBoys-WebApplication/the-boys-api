@@ -251,6 +251,11 @@ pub async fn create_trip(
     if body.destination.trim().is_empty() {
         return Err(AppError::BadRequest("destination is required".into()));
     }
+    if let (Some(start), Some(end)) = (body.start_date, body.end_date) {
+        if end < start {
+            return Err(AppError::BadRequest("end_date must be on or after start_date".into()));
+        }
+    }
 
     let is_member: bool = sqlx::query(
         "SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)",
@@ -358,11 +363,27 @@ pub async fn update_trip(
         return Err(AppError::Unauthorized);
     }
 
-    // Validate status if provided.
+    // Validate fields if provided.
+    if let Some(ref n) = body.name {
+        if n.trim().is_empty() {
+            return Err(AppError::BadRequest("name cannot be empty".into()));
+        }
+    }
+    if let Some(ref d) = body.destination {
+        if d.trim().is_empty() {
+            return Err(AppError::BadRequest("destination cannot be empty".into()));
+        }
+    }
     if let Some(ref s) = body.status {
         let valid = ["planning", "upcoming", "active", "completed", "cancelled"];
         if !valid.contains(&s.as_str()) {
             return Err(AppError::BadRequest(format!("invalid status '{s}'")));
+        }
+    }
+    // Only validate date order when both dates are explicitly provided in this request.
+    if let (Some(start), Some(end)) = (body.start_date, body.end_date) {
+        if end < start {
+            return Err(AppError::BadRequest("end_date must be on or after start_date".into()));
         }
     }
 
@@ -491,6 +512,11 @@ pub async fn create_activity(
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
+    if let Some(cost) = body.estimated_cost {
+        if cost < 0.0 {
+            return Err(AppError::BadRequest("estimated_cost cannot be negative".into()));
+        }
+    }
 
     let row = sqlx::query(
         "INSERT INTO activities
@@ -542,7 +568,17 @@ pub async fn update_activity(
     let auth = AuthUser::from_headers(&headers, &state.jwt_secret)?;
     resolve_activity(&state.db, activity_id, auth.user_id).await?; // membership check
 
-    // Validate status if provided.
+    // Validate fields if provided.
+    if let Some(ref n) = body.name {
+        if n.trim().is_empty() {
+            return Err(AppError::BadRequest("name cannot be empty".into()));
+        }
+    }
+    if let Some(cost) = body.estimated_cost {
+        if cost < 0.0 {
+            return Err(AppError::BadRequest("estimated_cost cannot be negative".into()));
+        }
+    }
     if let Some(ref s) = body.status {
         let valid = ["idea", "confirmed", "done"];
         if !valid.contains(&s.as_str()) {
