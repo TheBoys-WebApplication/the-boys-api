@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use anyhow::{Context, Result};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::Mutex;
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -26,6 +26,18 @@ pub fn new_discover_cache() -> DiscoverCache {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
+// ── Serde helper ──────────────────────────────────────────────────────────────
+
+/// Deserialise a field that may be absent, `null`, or a proper array.
+/// Absent → `Default::default()`, `null` → `Default::default()`.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 // ── Foursquare raw response shapes ────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -37,12 +49,14 @@ struct FsqSearchResponse {
 struct FsqPlace {
     fsq_id: String,
     name: String,
-    #[serde(default)]
+    /// May be absent or null for some place types.
+    #[serde(default, deserialize_with = "null_as_default")]
     categories: Vec<FsqCategory>,
     location: FsqLocation,
     distance: Option<u32>,
     rating: Option<f64>,
-    #[serde(default)]
+    /// Foursquare omits or nulls this when no photos exist.
+    #[serde(default, deserialize_with = "null_as_default")]
     photos: Vec<FsqPhoto>,
 }
 
@@ -77,8 +91,9 @@ impl FoursquareClient {
 
     /// Search for places near `location`.
     ///
-    /// Returns an empty `Vec` (rather than an error) when Foursquare responds
-    /// with 400, which typically means the location string was unrecognised.
+    /// Returns an empty `Vec` when Foursquare responds with 400 (unrecognised
+    /// location). Logs the full response body on any other non-success status
+    /// or JSON parse failure so the real cause is always visible in traces.
     pub async fn search(
         &self,
         location: &str,
@@ -113,24 +128,34 @@ impl FoursquareClient {
             .await
             .context("Foursquare HTTP request failed")?;
 
-        // 400 typically means an unrecognised location — return empty gracefully.
-        if resp.status() == reqwest::StatusCode::BAD_REQUEST {
+        let status = resp.status();
+
+        // Read the full body so we can always log it on failure.
+        let body = resp
+            .text()
+            .await
+            .context("Failed to read Foursquare response body")?;
+
+        // 400 = unrecognised location or empty result set — not an error.
+        if status == reqwest::StatusCode::BAD_REQUEST {
             tracing::warn!(
-                location = location,
-                query = query,
+                %location,
+                ?query,
+                %body,
                 "Foursquare returned 400; returning empty results"
             );
             return Ok(vec![]);
         }
 
-        if !resp.status().is_success() {
-            anyhow::bail!("Foursquare returned HTTP {}", resp.status());
+        if !status.is_success() {
+            tracing::error!(%status, %body, "Foursquare returned non-success status");
+            anyhow::bail!("Foursquare returned HTTP {status}");
         }
 
-        let fsq: FsqSearchResponse = resp
-            .json()
-            .await
-            .context("Failed to deserialise Foursquare response")?;
+        let fsq: FsqSearchResponse = serde_json::from_str(&body).map_err(|e| {
+            tracing::error!(%e, %body, "Failed to parse Foursquare response");
+            anyhow::anyhow!("Failed to parse Foursquare response: {e}")
+        })?;
 
         let results = fsq
             .results
