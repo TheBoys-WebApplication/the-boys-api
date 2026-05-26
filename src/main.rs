@@ -3,10 +3,10 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
+mod amadeus;
 mod config;
 mod db;
 mod error;
-mod foursquare;
 mod jwt;
 mod middleware;
 mod routes;
@@ -15,8 +15,8 @@ mod routes;
 pub struct AppState {
     pub db: PgPool,
     pub jwt_secret: String,
-    pub fsq_client: Arc<foursquare::FoursquareClient>,
-    pub discover_cache: foursquare::DiscoverCache,
+    pub amadeus_client: Arc<amadeus::AmadeusClient>,
+    pub discover_cache: amadeus::DiscoverCache,
 }
 
 #[tokio::main]
@@ -36,8 +36,11 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         db,
         jwt_secret: config.jwt_secret,
-        fsq_client: Arc::new(foursquare::FoursquareClient::new(config.fsq_key)),
-        discover_cache: foursquare::new_discover_cache(),
+        amadeus_client: Arc::new(amadeus::AmadeusClient::new(
+            config.amadeus_key,
+            config.amadeus_secret,
+        )),
+        discover_cache: amadeus::new_discover_cache(),
     };
 
     let app = Router::new()

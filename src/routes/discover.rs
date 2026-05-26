@@ -9,30 +9,19 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use crate::{
+    amadeus::DiscoverResult,
     error::AppError,
-    foursquare::DiscoverResult,
     middleware::auth::AuthUser,
     AppState,
 };
 
-const CACHE_TTL_SECS: u64 = 3_600; // 1 hour — matches staleTime on the frontend
-
-/// Map a UI category slug to the corresponding Foursquare category IDs.
-fn category_ids(slug: &str) -> &'static str {
-    match slug {
-        "outdoors" => "17000",               // Landmarks & Outdoors
-        "culture"  => "10000",               // Arts & Entertainment
-        "food"     => "13000",               // Dining & Drinking
-        "sports"   => "19000",               // Sports & Recreation
-        _          => "10000,13000,17000,19000", // all
-    }
-}
+const CACHE_TTL_SECS: u64 = 3_600; // 1 hour — mirrors staleTime on the frontend
 
 #[derive(Deserialize)]
 pub struct DiscoverParams {
     /// UI category slug: all | outdoors | culture | food | sports
     pub category: Option<String>,
-    /// Optional free-text keyword filter.
+    /// Optional keyword filter (passed through; Amadeus ignores it).
     pub query: Option<String>,
     /// Overrides the trip's destination when provided.
     pub location: Option<String>,
@@ -46,7 +35,7 @@ pub async fn search(
 ) -> Result<Json<Vec<DiscoverResult>>, AppError> {
     let auth = AuthUser::from_headers(&headers, &state.jwt_secret)?;
 
-    // Single query: verify membership AND fetch the trip destination.
+    // Single query: verify group membership AND fetch the trip destination.
     let row = sqlx::query(
         "SELECT t.destination
          FROM trips t
@@ -61,7 +50,7 @@ pub async fn search(
 
     let trip_destination: String = row.get("destination");
 
-    // Use the caller-supplied location or fall back to the trip's destination.
+    // Use the caller-supplied location or fall back to the trip destination.
     let location = params
         .location
         .as_deref()
@@ -73,7 +62,7 @@ pub async fn search(
     let category = params.category.as_deref().unwrap_or("all").to_owned();
     let query_text = params.query.clone();
 
-    // Build a deterministic cache key.
+    // Deterministic cache key.
     let cache_key = format!(
         "{}:{}:{}",
         location.to_lowercase(),
@@ -81,7 +70,7 @@ pub async fn search(
         query_text.as_deref().unwrap_or("").trim().to_lowercase(),
     );
 
-    // Check cache.
+    // Return cached result if still fresh.
     {
         let cache = state.discover_cache.lock().await;
         if let Some((results, inserted_at)) = cache.get(&cache_key) {
@@ -91,18 +80,17 @@ pub async fn search(
         }
     }
 
-    // Cache miss — hit Foursquare.
-    let categories = category_ids(&category);
+    // Cache miss — call Amadeus.
     let results = state
-        .fsq_client
-        .search(&location, categories, query_text.as_deref(), 20)
+        .amadeus_client
+        .search(&location, &category, query_text.as_deref())
         .await
         .map_err(|e| {
-            tracing::error!("Foursquare search failed: {e:#}");
+            tracing::error!("Amadeus search failed: {e:#}");
             AppError::Internal(anyhow::anyhow!("discover service unavailable"))
         })?;
 
-    // Store result in cache.
+    // Populate cache.
     {
         let mut cache = state.discover_cache.lock().await;
         cache.insert(cache_key, (results.clone(), Instant::now()));
