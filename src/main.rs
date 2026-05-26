@@ -1,10 +1,12 @@
 use axum::Router;
 use sqlx::PgPool;
+use std::sync::Arc;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 mod config;
 mod db;
 mod error;
+mod foursquare;
 mod jwt;
 mod middleware;
 mod routes;
@@ -13,6 +15,8 @@ mod routes;
 pub struct AppState {
     pub db: PgPool,
     pub jwt_secret: String,
+    pub fsq_client: Arc<foursquare::FoursquareClient>,
+    pub discover_cache: foursquare::DiscoverCache,
 }
 
 #[tokio::main]
@@ -29,7 +33,12 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("migrations applied");
 
-    let state = AppState { db, jwt_secret: config.jwt_secret };
+    let state = AppState {
+        db,
+        jwt_secret: config.jwt_secret,
+        fsq_client: Arc::new(foursquare::FoursquareClient::new(config.fsq_key)),
+        discover_cache: foursquare::new_discover_cache(),
+    };
 
     let app = Router::new()
         .nest("/api/v1", routes::router())
