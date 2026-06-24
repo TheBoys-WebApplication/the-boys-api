@@ -75,7 +75,7 @@ pub struct BalanceResponse {
     pub settled_out: f64,
     /// Total they have received via settlements.
     pub settled_in: f64,
-    /// net = paid - owed + settled_in - settled_out
+    /// net = paid - owed - settled_in + settled_out
     /// Positive → others owe them. Negative → they owe others.
     pub net: f64,
 }
@@ -161,7 +161,7 @@ fn round2(v: f64) -> f64 {
 fn equal_splits(amount: f64, n: usize) -> Vec<f64> {
     let total_cents = (amount * 100.0).round() as i64;
     let base_cents = total_cents / n as i64;
-    let extra = (total_cents % n as i64) as usize; // first `extra` people get 1 extra cent
+    let extra = (total_cents % n as i64) as usize;
     (0..n)
         .map(|i| {
             let cents = base_cents + if i < extra { 1 } else { 0 };
@@ -582,8 +582,8 @@ pub async fn get_balances(
              COALESCE(sr.settled_in,   0.0) AS settled_in,
              COALESCE(ep.paid,         0.0)
                - COALESCE(es2.owed,   0.0)
-               + COALESCE(sr.settled_in,  0.0)
-               - COALESCE(sp.settled_out, 0.0) AS net
+               - COALESCE(sr.settled_in,  0.0)
+               + COALESCE(sp.settled_out, 0.0) AS net
          FROM group_members gm
          JOIN trips t ON t.id = $1
          JOIN users u ON u.id = gm.user_id

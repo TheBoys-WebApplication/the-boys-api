@@ -35,6 +35,39 @@ pub fn new_discover_cache() -> DiscoverCache {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+/// Extract just the city name from a destination string.
+/// Strips state/country qualifiers so Amadeus geocoding works reliably.
+/// e.g. "Milwaukee Wisconsin" → "Milwaukee", "Paris, France" → "Paris"
+fn extract_city(location: &str) -> String {
+    let s = location.split(',').next().unwrap_or(location).trim();
+
+    const US_STATES: &[&str] = &[
+        "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+        "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho",
+        "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
+        "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
+        "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+        "New Hampshire", "New Jersey", "New Mexico", "New York",
+        "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon",
+        "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+        "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+        "West Virginia", "Wisconsin", "Wyoming",
+    ];
+
+    let s_lower = s.to_lowercase();
+    for state in US_STATES {
+        let state_lower = state.to_lowercase();
+        if s_lower.ends_with(&state_lower) {
+            let stripped = s[..s.len() - state.len()].trim();
+            if !stripped.is_empty() {
+                return stripped.to_owned();
+            }
+        }
+    }
+
+    s.to_owned()
+}
+
 /// Approximate distance in metres between two lat/lon points.
 fn haversine_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> u32 {
     const R: f64 = 6_371_000.0;
@@ -210,7 +243,9 @@ impl AmadeusClient {
     /// Resolve a location string to lat/lon via the Amadeus city search endpoint.
     /// Returns `None` when the city is not found.
     async fn geocode(&self, location: &str) -> Result<Option<GeoCode>> {
-        let key = location.trim().to_lowercase();
+        let city = extract_city(location);
+        let location = city.as_str();
+        let key = location.to_lowercase();
 
         {
             let cache = self.geocode_cache.lock().await;
