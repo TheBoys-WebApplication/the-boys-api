@@ -17,6 +17,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub amadeus_client: Arc<amadeus::AmadeusClient>,
     pub discover_cache: amadeus::DiscoverCache,
+    pub invite_code: Option<String>,
 }
 
 #[tokio::main]
@@ -41,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
             config.amadeus_secret,
         )),
         discover_cache: amadeus::new_discover_cache(),
+        invite_code: config.invite_code,
     };
 
     let app = Router::new()

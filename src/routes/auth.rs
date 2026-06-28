@@ -17,6 +17,7 @@ pub struct RegisterRequest {
     pub first_name: String,
     pub last_name: String,
     pub display_name: String,
+    pub invite_code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -45,6 +46,13 @@ pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
+    if let Some(ref required) = state.invite_code {
+        let provided = body.invite_code.as_deref().unwrap_or("").trim();
+        if provided != required.as_str() {
+            return Err(AppError::BadRequest("invalid invite code".into()));
+        }
+    }
+
     let exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
         .bind(&body.email)
         .fetch_one(&state.db)

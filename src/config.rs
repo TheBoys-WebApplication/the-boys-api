@@ -6,6 +6,8 @@ pub struct Config {
     pub bind_addr: String,
     pub amadeus_key: String,
     pub amadeus_secret: String,
+    /// When set, registrations are rejected unless the request includes this code.
+    pub invite_code: Option<String>,
 }
 
 impl Config {
@@ -16,6 +18,7 @@ impl Config {
             bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".into()),
             amadeus_key: std::env::var("AMADEUS_KEY").context("AMADEUS_KEY not set")?,
             amadeus_secret: std::env::var("AMADEUS_SECRET").context("AMADEUS_SECRET not set")?,
+            invite_code: std::env::var("INVITE_CODE").ok(),
         })
     }
 }
