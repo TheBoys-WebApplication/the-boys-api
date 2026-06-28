@@ -1,0 +1,37 @@
+# flyctl launch added from .gitignore
+# ── Rust / Cargo ─────────────────────────────────────────────────────────────
+target
+**/Cargo.lock          # remove this line if you want to lock deps (binary crates usually do)
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+**/.env
+**/.env.local
+**/.env.*.local
+**/*.pem
+
+# ── SQLx offline cache ───────────────────────────────────────────────────────
+# Uncomment the line below to ignore — keep it committed if you want
+# offline / CI builds without a live DB.
+# .sqlx/
+
+# ── IDE & GUI tools ──────────────────────────────────────────────────────────
+**/.idea
+**/.idea/**
+**/*.iml
+**/.vscode
+**/.vs
+**/*.suo
+**/*.user
+**/*.swp
+**/*.swo
+**/*~
+
+# ── OS files ─────────────────────────────────────────────────────────────────
+**/.DS_Store
+**/Thumbs.db
+**/desktop.ini
+**/ehthumbs.db
+
+# ── Windows debug symbols ────────────────────────────────────────────────────
+**/*.pdb
+fly.toml
