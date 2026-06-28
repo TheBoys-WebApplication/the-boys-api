@@ -2,6 +2,16 @@
 
 Rust/Axum backend for TheBoys — a trip planning and expense splitting app for friend groups.
 
+## Deployment
+
+| | |
+|---|---|
+| **Live URL** | `https://the-boys-api.fly.dev` |
+| **Host** | Fly.io (shared-cpu-1x, 256MB, region `iad`) |
+| **Database** | Neon PostgreSQL 16 (us-east-1) |
+
+Deploy: `fly deploy` from this directory.
+
 ## Stack
 
 - **Rust** (edition 2021) + **Axum 0.7**
